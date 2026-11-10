@@ -2,15 +2,13 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createClient } from "@/lib/supabase/client";
+import { authApi } from "@/lib/api";
 import { toast } from "sonner";
 
 export default function LoginPage() {
-  const router = useRouter();
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -20,25 +18,22 @@ export default function LoginPage() {
     const email = formData.get("email") as string;
     const password = formData.get("password") as string;
 
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const res = await authApi.login(email, password);
 
-    if (error) {
-      toast.error(error.message);
+    if (!res.success) {
+      toast.error(res.error || "Gagal masuk, periksa email dan password.");
+      setLoading(false);
     } else {
-      toast.success("Berhasil masuk");
-      router.push("/");
-      router.refresh();
+      toast.success("Berhasil masuk! Mengalihkan...");
+      const role = res.data?.user?.role;
+      setTimeout(() => {
+        if (role === "admin" || role === "superadmin") {
+          window.location.href = "/admin";
+        } else {
+          window.location.href = "/";
+        }
+      }, 500);
     }
-    setLoading(false);
-  };
-
-  const handleGoogleLogin = async () => {
-    const supabase = createClient();
-    await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
-    });
   };
 
   return (
@@ -70,25 +65,19 @@ export default function LoginPage() {
           </Button>
         </form>
 
-        <div className="relative" suppressHydrationWarning>
-          <div className="absolute inset-0 flex items-center" suppressHydrationWarning>
-            <span className="w-full border-t border-border" />
-          </div>
-          <div className="relative flex justify-center text-xs uppercase" suppressHydrationWarning>
-            <span className="bg-background px-2 text-muted-foreground">atau</span>
-          </div>
-        </div>
-
-        <Button variant="outline" className="w-full" onClick={handleGoogleLogin}>
-          Masuk dengan Google
-        </Button>
-
         <p className="text-center text-sm text-muted-foreground" suppressHydrationWarning>
           Belum punya akun?{" "}
           <Link href="/register" className="text-foreground underline">
             Daftar
           </Link>
         </p>
+
+        <div className="rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground space-y-1">
+          <p className="font-semibold text-foreground">Akun Uji Coba Tersedia:</p>
+          <p>Superadmin: <code className="text-foreground">superadmin@parfum.com</code> / <code className="text-foreground">superadmin123</code></p>
+          <p>Admin: <code className="text-foreground">admin@parfum.com</code> / <code className="text-foreground">admin123</code></p>
+          <p>Customer: <code className="text-foreground">user@parfum.com</code> / <code className="text-foreground">user123</code></p>
+        </div>
       </div>
     </div>
   );

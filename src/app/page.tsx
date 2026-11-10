@@ -3,21 +3,21 @@ import { Button } from "@/components/ui/button";
 import { ArrowRight, Sparkles, Truck, ShieldCheck } from "lucide-react";
 import { ProductCard } from "@/components/product-card";
 import { HeroSlider } from "@/components/hero-slider";
-import { createClient } from "@/lib/supabase/server";
+import { productApi, categoryApi, bannerApi } from "@/lib/api";
 import type { Product, Category } from "@/lib/types";
 
 async function getHomeData() {
   try {
-    const supabase = await createClient();
-    const [{ data: featuredProducts }, { data: categories }, { data: banners }] = await Promise.all([
-      supabase.from("products").select("*, category:categories(*), reviews(rating)").eq("is_featured", true).limit(6),
-      supabase.from("categories").select("*").limit(5),
-      supabase.from("banners").select("image_url").order("sort_order"),
+    const [prodsRes, catsRes, bannersRes] = await Promise.all([
+      productApi.getAll({ featured: 1, limit: 6 }),
+      categoryApi.getAll(),
+      bannerApi.getAll(),
     ]);
+
     return {
-      featuredProducts: (featuredProducts as Product[]) || [],
-      categories: (categories as Category[]) || [],
-      bannerImages: (banners || []).map((b: { image_url: string }) => b.image_url),
+      featuredProducts: (prodsRes.data as Product[]) || [],
+      categories: (catsRes.data as Category[]) || [],
+      bannerImages: (bannersRes.data || []).map((b) => b.image_url),
     };
   } catch {
     return { featuredProducts: [], categories: [], bannerImages: [] };

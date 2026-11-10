@@ -13,10 +13,9 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Plus, Pencil, Trash2, Upload, X } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import { productApi, categoryApi } from "@/lib/api";
 import { toast } from "sonner";
 import type { Product, Category } from "@/lib/types";
-import { saveProduct, deleteProduct } from "./actions";
 
 function formatPrice(price: number) {
   return new Intl.NumberFormat("id-ID", {
@@ -45,37 +44,20 @@ export default function AdminProductsPage() {
   const imageInputRef = useRef<HTMLInputElement>(null);
 
   const fetchData = async () => {
-    const supabase = createClient();
-    const [{ data: prods }, { data: cats }] = await Promise.all([
-      supabase
-        .from("products")
-        .select("*, category:categories(*)")
-        .order("created_at", { ascending: false }),
-      supabase.from("categories").select("*"),
+    const [prodsRes, catsRes] = await Promise.all([
+      productApi.getAll(),
+      categoryApi.getAll(),
     ]);
-    setProducts((prods as Product[]) || []);
-    setCategories((cats as Category[]) || []);
+    if (prodsRes.success && prodsRes.data) {
+      setProducts(prodsRes.data);
+    }
+    if (catsRes.success && catsRes.data) {
+      setCategories(catsRes.data);
+    }
   };
 
   useEffect(() => {
-    let cancelled = false;
-    async function loadProducts() {
-      const supabase = createClient();
-      const [{ data: prods }, { data: cats }] = await Promise.all([
-        supabase
-          .from("products")
-          .select("*, category:categories(*)")
-          .order("created_at", { ascending: false }),
-        supabase.from("categories").select("*"),
-      ]);
-      if (cancelled) return;
-      setProducts((prods as Product[]) || []);
-      setCategories((cats as Category[]) || []);
-    }
-    loadProducts();
-    return () => {
-      cancelled = true;
-    };
+    fetchData();
   }, []);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -123,9 +105,15 @@ export default function AdminProductsPage() {
     };
 
     startTransition(async () => {
-      const result = await saveProduct(productData, editing?.id);
-      if (result.error) {
-        toast.error(result.error);
+      let result;
+      if (editing?.id) {
+        result = await productApi.update(editing.id, productData as any);
+      } else {
+        result = await productApi.create(productData as any);
+      }
+
+      if (!result.success) {
+        toast.error(result.error || "Gagal menyimpan produk");
       } else {
         toast.success(editing ? "Produk diupdate" : "Produk ditambahkan");
         setDialogOpen(false);
@@ -140,9 +128,9 @@ export default function AdminProductsPage() {
     if (!confirm("Hapus produk ini?")) return;
     
     startTransition(async () => {
-      const result = await deleteProduct(id);
-      if (result.error) {
-        toast.error(result.error);
+      const result = await productApi.delete(id);
+      if (!result.success) {
+        toast.error(result.error || "Gagal menghapus produk");
       } else {
         toast.success("Produk dihapus");
         fetchData();

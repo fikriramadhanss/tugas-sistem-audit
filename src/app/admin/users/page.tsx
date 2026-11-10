@@ -1,16 +1,24 @@
-import { createClient } from "@/lib/supabase/server";
+"use client";
+
+import { useEffect, useState } from "react";
 import { RoleToggle } from "./role-toggle";
+import { userApi } from "@/lib/api";
 
-export default async function AdminUsersPage() {
-  let users: { id: string; full_name: string | null; phone: string | null; city: string | null; role: string; created_at: string }[] = [];
+export default function AdminUsersPage() {
+  const [users, setUsers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  try {
-    const supabase = await createClient();
-    const { data } = await supabase.from("profiles").select("*").order("created_at", { ascending: false });
-    users = data || [];
-  } catch {
-    // Supabase not configured
-  }
+  const fetchUsers = async () => {
+    const res = await userApi.getAll();
+    if (res.success && res.data) {
+      setUsers(res.data);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    fetchUsers();
+  }, []);
 
   return (
     <div>
@@ -27,19 +35,29 @@ export default async function AdminUsersPage() {
             </tr>
           </thead>
           <tbody>
-            {users.map((user) => (
-              <tr key={user.id} className="border-b border-border">
-                <td className="py-2 pr-4 font-medium">{user.full_name || "-"}</td>
-                <td className="py-2 pr-4">{user.phone || "-"}</td>
-                <td className="py-2 pr-4">{user.city || "-"}</td>
-                <td className="py-2 pr-4">
-                  <RoleToggle userId={user.id} initialRole={user.role} />
-                </td>
-                <td className="py-2 text-xs text-muted-foreground">
-                  {new Date(user.created_at).toLocaleDateString("id-ID")}
-                </td>
+            {loading ? (
+              <tr>
+                <td colSpan={5} className="py-4 text-center text-muted-foreground">Memuat users...</td>
               </tr>
-            ))}
+            ) : users.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="py-4 text-center text-muted-foreground">Belum ada user.</td>
+              </tr>
+            ) : (
+              users.map((user) => (
+                <tr key={user.id} className="border-b border-border">
+                  <td className="py-2 pr-4 font-medium">{user.full_name || user.email || "-"}</td>
+                  <td className="py-2 pr-4">{user.phone || "-"}</td>
+                  <td className="py-2 pr-4">{user.city || "-"}</td>
+                  <td className="py-2 pr-4">
+                    <RoleToggle userId={user.id} initialRole={user.role} onUpdated={fetchUsers} />
+                  </td>
+                  <td className="py-2 text-xs text-muted-foreground">
+                    {new Date(user.created_at).toLocaleDateString("id-ID")}
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>

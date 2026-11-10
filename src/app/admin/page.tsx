@@ -1,51 +1,57 @@
-import { createClient } from "@/lib/supabase/server";
+"use client";
+
+import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Package, ShoppingCart, Users, DollarSign } from "lucide-react";
 import { RevenueChart } from "@/components/revenue-chart";
+import { fetchApi } from "@/lib/api";
 
 function formatPrice(price: number) {
   return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(price);
 }
 
-export default async function AdminDashboardPage() {
-  let totalProducts = 0;
-  let totalOrders = 0;
-  let totalUsers = 0;
-  let totalRevenue = 0;
-  let pendingOrders = 0;
-  let recentOrders: { id: string; total_amount: number; status: string; created_at: string; profiles: { full_name: string | null } | null }[] = [];
+export default function AdminDashboardPage() {
+  const [loading, setLoading] = useState(true);
+  const [statsData, setStatsData] = useState({
+    totalProducts: 0,
+    totalOrders: 0,
+    totalUsers: 0,
+    totalRevenue: 0,
+    pendingOrders: 0,
+    recentOrders: [] as { id: string; total_amount: number; status: string; created_at: string; profiles: { full_name: string | null } | null }[],
+  });
 
-  try {
-    const supabase = await createClient();
-    const [prodRes, orderRes, userRes, ordersData, recent] = await Promise.all([
-      supabase.from("products").select("*", { count: "exact", head: true }),
-      supabase.from("orders").select("*", { count: "exact", head: true }),
-      supabase.from("profiles").select("*", { count: "exact", head: true }),
-      supabase.from("orders").select("total_amount, status").eq("status", "delivered"),
-      supabase.from("orders").select("*, profiles(full_name)").order("created_at", { ascending: false }).limit(5),
-    ]);
-    totalProducts = prodRes.count || 0;
-    totalOrders = orderRes.count || 0;
-    totalUsers = userRes.count || 0;
-    totalRevenue = ordersData.data?.reduce((sum, o) => sum + (o.total_amount || 0), 0) || 0;
-    pendingOrders = ordersData.data?.filter((o) => o.status === "pending").length || 0;
-    recentOrders = (recent.data as typeof recentOrders) || [];
-  } catch {
-    // Supabase not configured
-  }
+  useEffect(() => {
+    const loadStats = async () => {
+      const res = await fetchApi<any>("/admin/stats.php");
+      if (res.success && res.data) {
+        setStatsData({
+          totalProducts: res.data.total_products || 0,
+          totalOrders: res.data.total_orders || 0,
+          totalUsers: res.data.total_users || 0,
+          totalRevenue: res.data.total_revenue || 0,
+          pendingOrders: res.data.pending_orders || 0,
+          recentOrders: res.data.recent_orders || [],
+        });
+      }
+      setLoading(false);
+    };
+
+    loadStats();
+  }, []);
 
   const stats = [
-    { label: "Total Produk", value: totalProducts, icon: Package },
-    { label: "Total Pesanan", value: totalOrders, icon: ShoppingCart },
-    { label: "Total User", value: totalUsers, icon: Users },
-    { label: "Total Pendapatan", value: formatPrice(totalRevenue), icon: DollarSign },
+    { label: "Total Produk", value: statsData.totalProducts, icon: Package },
+    { label: "Total Pesanan", value: statsData.totalOrders, icon: ShoppingCart },
+    { label: "Total User", value: statsData.totalUsers, icon: Users },
+    { label: "Total Pendapatan", value: formatPrice(statsData.totalRevenue), icon: DollarSign },
   ];
 
   return (
     <div>
       <h1 className="font-serif text-2xl">Dashboard</h1>
       <p className="mt-1 text-sm text-muted-foreground">
-        {pendingOrders} Pesanan menunggu diproses
+        {loading ? "Memuat data..." : `${statsData.pendingOrders} Pesanan menunggu diproses`}
       </p>
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -70,7 +76,7 @@ export default async function AdminDashboardPage() {
       {/* Recent Orders */}
       <div className="mt-8">
         <h2 className="text-sm font-medium">Pesanan Terbaru</h2>
-        {recentOrders.length === 0 ? (
+        {statsData.recentOrders.length === 0 ? (
           <p className="mt-4 text-sm text-muted-foreground">Belum ada pesanan.</p>
         ) : (
           <div className="mt-4 overflow-x-auto">
@@ -85,7 +91,7 @@ export default async function AdminDashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {recentOrders.map((order) => (
+                {statsData.recentOrders.map((order) => (
                   <tr key={order.id} className="border-b border-border">
                     <td className="py-2 pr-4 font-mono text-xs">#{order.id.slice(0, 8)}</td>
                     <td className="py-2 pr-4">{order.profiles?.full_name || "-"}</td>

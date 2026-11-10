@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createClient } from "@/lib/supabase/client";
+import { authApi } from "@/lib/api";
 import { toast } from "sonner";
 import type { Profile } from "@/lib/types";
 
@@ -14,11 +14,10 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const fetch = async () => {
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      const { data } = await supabase.from("profiles").select("*").eq("id", user.id).single();
-      setProfile(data as Profile);
+      const res = await authApi.getMe();
+      if (res.success && res.data?.user) {
+        setProfile(res.data.user);
+      }
     };
     fetch();
   }, []);
@@ -27,21 +26,24 @@ export default function DashboardPage() {
     e.preventDefault();
     setLoading(true);
     const formData = new FormData(e.currentTarget);
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
 
-    const { error } = await supabase.from("profiles").update({
+    const res = await authApi.updateProfile({
       full_name: formData.get("full_name") as string,
       phone: formData.get("phone") as string,
       address: formData.get("address") as string,
       city: formData.get("city") as string,
       province: formData.get("province") as string,
       postal_code: formData.get("postal_code") as string,
-    }).eq("id", user.id);
+    });
 
-    if (error) toast.error("Gagal menyimpan");
-    else toast.success("Profil berhasil diperbarui");
+    if (!res.success) {
+      toast.error(res.error || "Gagal menyimpan");
+    } else {
+      toast.success("Profil berhasil diperbarui");
+      if (res.data?.user) {
+        setProfile(res.data.user);
+      }
+    }
     setLoading(false);
   };
 

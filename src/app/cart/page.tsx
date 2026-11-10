@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowRight, Minus, Plus, ShieldCheck, ShoppingBag, Trash2 } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import { cartApi, getToken } from "@/lib/api";
 import { toast } from "sonner";
 import type { CartItem } from "@/lib/types";
 import { useCart } from "@/components/cart-context";
@@ -29,52 +29,39 @@ export default function CartPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    let cancelled = false;
-
     async function loadCart() {
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        if (!cancelled) setLoading(false);
+      const token = getToken();
+      if (!token) {
+        setLoading(false);
         return;
       }
 
-      const { data } = await supabase
-        .from("carts")
-        .select("*, product:products(*)")
-        .eq("user_id", user.id);
-
-      if (cancelled) return;
-      setItems((data as CartItem[]) || []);
+      const res = await cartApi.get();
+      if (res.success && res.data) {
+        setItems(res.data);
+      }
       setLoading(false);
     }
 
     loadCart();
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
   const updateQty = async (id: string, qty: number) => {
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (qty < 1 || !user) return;
-    
-    await supabase.from("carts").update({ quantity: qty }).eq("id", id).eq("user_id", user.id);
-    setItems((prev) => prev.map((i) => (i.id === id ? { ...i, quantity: qty } : i)));
-    refreshCart();
+    if (qty < 1) return;
+    const res = await cartApi.update(id, qty);
+    if (res.success) {
+      setItems((prev) => prev.map((i) => (i.id === id ? { ...i, quantity: qty } : i)));
+      refreshCart();
+    }
   };
 
   const removeItem = async (id: string) => {
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    
-    // Secure delete: Ensure we only delete items belonging to the authenticated user
-    await supabase.from("carts").delete().eq("id", id).eq("user_id", user.id);
-    setItems((prev) => prev.filter((i) => i.id !== id));
-    toast.success("Item dihapus dari keranjang");
-    refreshCart();
+    const res = await cartApi.delete(id);
+    if (res.success) {
+      setItems((prev) => prev.filter((i) => i.id !== id));
+      toast.success("Item dihapus dari keranjang");
+      refreshCart();
+    }
   };
 
   const getItemPrice = (item: CartItem) => {
@@ -252,10 +239,9 @@ export default function CartPage() {
             <Button
               variant="outline"
               className="h-10 w-full"
-              onClick={async () => {
-                const supabase = createClient();
-                const { data: { user } } = await supabase.auth.getUser();
-                if (!user) {
+              onClick={() => {
+                const token = getToken();
+                if (!token) {
                   toast.error("Silakan login terlebih dahulu untuk melakukan pemesanan");
                   router.push("/login");
                   return;

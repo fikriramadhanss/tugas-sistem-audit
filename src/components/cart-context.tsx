@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { getToken, cartApi } from "@/lib/api";
 
 interface CartContextType {
   cartCount: number;
@@ -17,29 +17,20 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const fetchCartCount = async () => {
     try {
-      const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!user) {
+      const token = getToken();
+      if (!token) {
         setCartCount(0);
         setLoading(false);
         return;
       }
 
-      const { data, error } = await supabase
-        .from("carts")
-        .select("quantity")
-        .eq("user_id", user.id);
-
-      if (error) {
-        console.error("Error fetching cart count:", error);
-        return;
+      const res = await cartApi.get();
+      if (res.success && res.data) {
+        const count = res.data.reduce((sum, item) => sum + (item.quantity || 0), 0);
+        setCartCount(count);
+      } else {
+        setCartCount(0);
       }
-
-      const count = data ? data.reduce((sum, item) => sum + (item.quantity || 0), 0) : 0;
-      setCartCount(count);
     } catch (err) {
       console.error("Cart count error:", err);
     } finally {
@@ -49,15 +40,6 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     fetchCartCount();
-
-    const supabase = createClient();
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
-      fetchCartCount();
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
   }, []);
 
   return (

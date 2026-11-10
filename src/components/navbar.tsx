@@ -14,7 +14,7 @@ import {
   Settings,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { createClient } from "@/lib/supabase/client";
+import { getToken, getStoredUser, authApi } from "@/lib/api";
 import { useCart } from "@/components/cart-context";
 
 const navLinks = [
@@ -31,36 +31,38 @@ export function Navbar() {
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
-    try {
-      const supabase = createClient();
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        setLoggedIn(!!session);
-        if (session?.user) {
-          supabase.from("profiles").select("role").eq("id", session.user.id).single().then(({ data }) => {
-            setIsAdmin(data?.role === "admin");
-          });
+    const token = getToken();
+    const user = getStoredUser();
+
+    if (token && user) {
+      setLoggedIn(true);
+      setIsAdmin(user.role === "admin" || (user.role as any) === "superadmin");
+    } else if (token) {
+      // Validasi token ke backend jika ada
+      authApi.getMe().then((res) => {
+        if (res.success && res.data?.user) {
+          setLoggedIn(true);
+          setIsAdmin(res.data.user.role === "admin" || (res.data.user.role as any) === "superadmin");
+        } else {
+          authApi.logout();
+          setLoggedIn(false);
+          setIsAdmin(false);
         }
       });
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-        setLoggedIn(!!session);
-        if (!session) setIsAdmin(false);
-      });
-      return () => subscription.unsubscribe();
-    } catch {
-      // Supabase not configured
+    } else {
+      setLoggedIn(false);
+      setIsAdmin(false);
     }
   }, []);
 
   const accountHref = loggedIn ? "/dashboard" : "/login";
 
-  const handleLogout = async () => {
-    try {
-      const supabase = createClient();
-      await supabase.auth.signOut();
-      setLoggedIn(false);
-      router.push("/");
-      router.refresh();
-    } catch {}
+  const handleLogout = () => {
+    authApi.logout();
+    setLoggedIn(false);
+    setIsAdmin(false);
+    router.push("/login");
+    router.refresh();
   };
 
   return (

@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Package, Truck, CheckCircle, Clock, XCircle } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import { orderApi } from "@/lib/api";
 import type { Order } from "@/lib/types";
 
 function formatPrice(price: number) {
@@ -36,17 +36,10 @@ export default function OrdersPage() {
 
   useEffect(() => {
     const fetch = async () => {
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { setLoading(false); return; }
-
-      const { data } = await supabase
-        .from("orders")
-        .select("*, order_items(*, product:products(images)), shipment:shipments(*)")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false });
-
-      setOrders((data as Order[]) || []);
+      const res = await orderApi.getAll();
+      if (res.success && res.data) {
+        setOrders(res.data);
+      }
       setLoading(false);
     };
     fetch();

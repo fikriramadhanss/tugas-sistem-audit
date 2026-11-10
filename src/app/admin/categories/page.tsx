@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Plus, Pencil, Trash2 } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import { categoryApi } from "@/lib/api";
 import { toast } from "sonner";
 import type { Category } from "@/lib/types";
 
@@ -16,33 +16,39 @@ export default function AdminCategoriesPage() {
   const [editing, setEditing] = useState<Category | null>(null);
 
   const fetchData = async () => {
-    const supabase = createClient();
-    const { data } = await supabase.from("categories").select("*").order("created_at", { ascending: false });
-    setCategories((data as Category[]) || []);
+    const res = await categoryApi.getAll();
+    if (res.success && res.data) {
+      setCategories(res.data);
+    }
   };
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchData();
   }, []);
 
   const handleSave = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
-    const supabase = createClient();
     const name = formData.get("name") as string;
     const catData = {
       name,
-      slug: name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, ""),
       description: formData.get("description") as string,
     };
 
     if (editing) {
-      await supabase.from("categories").update(catData).eq("id", editing.id);
-      toast.success("Kategori diupdate");
+      const res = await categoryApi.update(editing.id, catData);
+      if (res.success) {
+        toast.success("Kategori diupdate");
+      } else {
+        toast.error(res.error || "Gagal mengupdate");
+      }
     } else {
-      await supabase.from("categories").insert(catData);
-      toast.success("Kategori ditambahkan");
+      const res = await categoryApi.create(catData);
+      if (res.success) {
+        toast.success("Kategori ditambahkan");
+      } else {
+        toast.error(res.error || "Gagal menambah kategori");
+      }
     }
     setDialogOpen(false);
     setEditing(null);
@@ -51,10 +57,13 @@ export default function AdminCategoriesPage() {
 
   const handleDelete = async (id: string) => {
     if (!confirm("Hapus kategori ini?")) return;
-    const supabase = createClient();
-    await supabase.from("categories").delete().eq("id", id);
-    toast.success("Kategori dihapus");
-    fetchData();
+    const res = await categoryApi.delete(id);
+    if (res.success) {
+      toast.success("Kategori dihapus");
+      fetchData();
+    } else {
+      toast.error(res.error || "Gagal menghapus kategori");
+    }
   };
 
   return (

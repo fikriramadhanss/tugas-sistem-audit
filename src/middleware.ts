@@ -1,74 +1,43 @@
-import { createServerClient } from "@supabase/ssr";
+// src/middleware.ts
 import { NextResponse, type NextRequest } from "next/server";
 
-export async function middleware(request: NextRequest) {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+export function middleware(request: NextRequest) {
+  const authToken = request.cookies.get("auth_token")?.value;
+  const userRole = request.cookies.get("user_role")?.value;
+  const { pathname } = request.nextUrl;
 
-  if (!supabaseUrl || !supabaseKey || supabaseUrl.includes("your_supabase")) {
-    return NextResponse.next();
-  }
-
-  let supabaseResponse = NextResponse.next({ request });
-
-  const supabase = createServerClient(supabaseUrl, supabaseKey, {
-    cookies: {
-      getAll() {
-        return request.cookies.getAll();
-      },
-      setAll(cookiesToSet) {
-        cookiesToSet.forEach(({ name, value }) =>
-          request.cookies.set(name, value)
-        );
-        supabaseResponse = NextResponse.next({ request });
-        cookiesToSet.forEach(({ name, value, options }) =>
-          supabaseResponse.cookies.set(name, value, options)
-        );
-      },
-    },
-  });
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  // Protect dashboard routes
-  if (request.nextUrl.pathname.startsWith("/dashboard") && !user) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/login";
-    return NextResponse.redirect(url);
-  }
-
-  // Protect checkout routes
-  if (request.nextUrl.pathname.startsWith("/checkout") && !user) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/login";
-    return NextResponse.redirect(url);
-  }
-
-  // Protect admin routes
-  if (request.nextUrl.pathname.startsWith("/admin")) {
-    if (!user) {
+  // Protect /admin routes
+  if (pathname.startsWith("/admin")) {
+    if (!authToken) {
       const url = request.nextUrl.clone();
       url.pathname = "/login";
       return NextResponse.redirect(url);
     }
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
 
-    if (profile?.role !== "admin") {
+    if (userRole !== "admin" && userRole !== "superadmin") {
       const url = request.nextUrl.clone();
       url.pathname = "/";
       return NextResponse.redirect(url);
     }
   }
 
-  return supabaseResponse;
+  // Protect /dashboard and /checkout routes
+  if (pathname.startsWith("/dashboard") || pathname.startsWith("/checkout")) {
+    if (!authToken) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/login";
+      return NextResponse.redirect(url);
+    }
+  }
+
+  return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/admin/:path*", "/checkout", "/checkout/:path*"],
+  matcher: [
+    "/dashboard/:path*",
+    "/admin/:path*",
+    "/checkout/:path*",
+    "/checkout",
+  ],
 };

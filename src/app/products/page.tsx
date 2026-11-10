@@ -1,6 +1,6 @@
-import { createClient } from "@/lib/supabase/server";
 import { ProductCard } from "@/components/product-card";
 import { ProductFilters } from "./filters";
+import { productApi, categoryApi } from "@/lib/api";
 import type { Product, Category } from "@/lib/types";
 
 type SearchParams = Promise<{ [key: string]: string | string[] | undefined }>;
@@ -19,39 +19,19 @@ export default async function ProductsPage({
   let categories: Category[] = [];
 
   try {
-    const supabase = await createClient();
+    const [prodsRes, catsRes] = await Promise.all([
+      productApi.getAll({
+        search,
+        category,
+        sort,
+      }),
+      categoryApi.getAll(),
+    ]);
 
-    let query = supabase.from("products").select("*, category:categories(*), reviews(rating)");
-
-    if (search) {
-      query = query.ilike("name", `%${search}%`);
-    }
-
-    if (category) {
-      const { data: cat } = await supabase
-        .from("categories")
-        .select("id")
-        .eq("slug", category)
-        .single();
-      if (cat) {
-        query = query.eq("category_id", cat.id);
-      }
-    }
-
-    if (sort === "price_asc") {
-      query = query.order("price", { ascending: true });
-    } else if (sort === "price_desc") {
-      query = query.order("price", { ascending: false });
-    } else {
-      query = query.order("created_at", { ascending: false });
-    }
-
-    const { data: prods } = await query;
-    const { data: cats } = await supabase.from("categories").select("*");
-    products = (prods as Product[]) || [];
-    categories = (cats as Category[]) || [];
+    products = (prodsRes.data as Product[]) || [];
+    categories = (catsRes.data as Category[]) || [];
   } catch {
-    // Supabase not configured yet
+    // Error loading data
   }
 
   return (

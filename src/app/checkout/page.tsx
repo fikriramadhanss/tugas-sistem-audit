@@ -6,10 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { createClient } from "@/lib/supabase/client";
+import { cartApi, authApi, checkoutApi, getToken } from "@/lib/api";
 import { toast } from "sonner";
 import type { CartItem } from "@/lib/types";
-import { placeOrder } from "./actions";
 import { useCart } from "@/components/cart-context";
 
 function formatPrice(price: number) {
@@ -46,28 +45,23 @@ export default function CheckoutPage() {
 
   useEffect(() => {
     const fetchCart = async () => {
-      const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
+      const token = getToken();
+      if (!token) {
         router.push("/login");
         return;
       }
 
-      const [{ data: cartData }, { data: profileData }] = await Promise.all([
-        supabase
-          .from("carts")
-          .select("*, product:products(*)")
-          .eq("user_id", user.id),
-        supabase
-          .from("profiles")
-          .select("full_name, phone, address, city, province, postal_code")
-          .eq("id", user.id)
-          .single(),
+      const [cartRes, profileRes] = await Promise.all([
+        cartApi.get(),
+        authApi.getMe(),
       ]);
-      setItems((cartData as CartItem[]) || []);
-      setProfile(profileData);
+
+      if (cartRes.success && cartRes.data) {
+        setItems(cartRes.data);
+      }
+      if (profileRes.success && profileRes.data?.user) {
+        setProfile(profileRes.data.user);
+      }
     };
     fetchCart();
 
@@ -206,7 +200,7 @@ export default function CheckoutPage() {
     }
 
     startTransition(async () => {
-      const result = await placeOrder({
+      const result = await checkoutApi.placeOrder({
         shipping_name: formData.get("name") as string,
         shipping_phone: formData.get("phone") as string,
         shipping_address: formData.get("address") as string,
@@ -217,25 +211,24 @@ export default function CheckoutPage() {
         shipping_cost: shippingCost,
       });
 
-      if (result.error) {
-        toast.error(result.error);
+      if (!result.success || !result.data) {
+        toast.error(result.error || "Gagal membuat pesanan.");
         return;
       }
 
-      if (result.success && result.items && result.shipping) {
-        // Send WhatsApp notification with server-verified total
-        const waMessage = encodeURIComponent(
-          `Pesanan Baru!\n\nNama: ${result.shipping.name}\nTelepon: ${result.shipping.phone}\n\nProduk:\n${result.items.map((i) => `- ${i.name} x${i.quantity}`).join("\n")}\n\nOngkir (${selectedCourier.toUpperCase()}): ${formatPrice(shippingCost)}\nTotal: ${formatPrice(result.total ?? 0)}\nAlamat: ${result.shipping.address}, ${result.shipping.city}`
-        );
+      const orderData = result.data;
+      // Send WhatsApp notification with server-verified total
+      const waMessage = encodeURIComponent(
+        `Pesanan Baru!\n\nNama: ${orderData.shipping.name}\nTelepon: ${orderData.shipping.phone}\n\nProduk:\n${orderData.items.map((i: any) => `- ${i.product_name || i.name} x${i.quantity}`).join("\n")}\n\nOngkir (${selectedCourier.toUpperCase()}): ${formatPrice(shippingCost)}\nTotal: ${formatPrice(orderData.total_amount ?? 0)}\nAlamat: ${orderData.shipping.address}, ${orderData.shipping.city}`
+      );
 
-        toast.success("Pesanan berhasil dibuat!");
-        refreshCart();
-        window.open(
-          `https://wa.me/6281234567890?text=${waMessage}`,
-          "_blank"
-        );
-        router.push("/dashboard/orders");
-      }
+      toast.success("Pesanan berhasil dibuat!");
+      refreshCart();
+      window.open(
+        `https://wa.me/6281234567890?text=${waMessage}`,
+        "_blank"
+      );
+      router.push("/dashboard/orders");
     });
   };
 

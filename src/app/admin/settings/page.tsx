@@ -5,9 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { createClient } from "@/lib/supabase/client";
+import { settingApi } from "@/lib/api";
 import { toast } from "sonner";
-import { saveStoreSettings } from "./actions";
 
 export default function AdminSettingsPage() {
   const [settings, setSettings] = useState<Record<string, string>>({});
@@ -15,13 +14,10 @@ export default function AdminSettingsPage() {
 
   useEffect(() => {
     const fetch = async () => {
-      const supabase = createClient();
-      const { data } = await supabase.from("store_settings").select("*");
-      const map: Record<string, string> = {};
-      data?.forEach((row: { key: string; value: string }) => {
-        map[row.key] = row.value;
-      });
-      setSettings(map);
+      const res = await settingApi.get();
+      if (res.success && res.data) {
+        setSettings(res.data);
+      }
     };
     fetch();
   }, []);
@@ -49,9 +45,9 @@ export default function AdminSettingsPage() {
     }
 
     startTransition(async () => {
-      const result = await saveStoreSettings(newSettings);
-      if (result.error) {
-        toast.error(result.error);
+      const result = await settingApi.update(newSettings);
+      if (!result.success) {
+        toast.error(result.error || "Gagal menyimpan");
       } else {
         toast.success("Pengaturan berhasil disimpan");
         setSettings(newSettings);

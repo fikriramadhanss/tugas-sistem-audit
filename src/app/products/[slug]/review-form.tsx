@@ -5,9 +5,19 @@ import { Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { submitReview } from "./reviews-actions";
+import { reviewApi } from "@/lib/api";
 
-export function ReviewForm({ productId, initialRating = 0, initialComment = "" }: { productId: string, initialRating?: number, initialComment?: string }) {
+export function ReviewForm({
+  productId,
+  initialRating = 5,
+  initialComment = "",
+  onSubmitted,
+}: {
+  productId: string;
+  initialRating?: number;
+  initialComment?: string;
+  onSubmitted?: () => void;
+}) {
   const [rating, setRating] = useState(initialRating);
   const [hoverRating, setHoverRating] = useState(0);
   const [comment, setComment] = useState(initialComment);
@@ -21,13 +31,19 @@ export function ReviewForm({ productId, initialRating = 0, initialComment = "" }
     }
 
     setLoading(true);
-    const result = await submitReview(productId, rating, comment);
+    const res = await reviewApi.create({
+      product_id: productId,
+      rating,
+      comment,
+    });
     setLoading(false);
 
-    if (result.error) {
-      toast.error(result.error);
+    if (!res.success) {
+      toast.error(res.error || "Gagal menyimpan ulasan");
     } else {
       toast.success("Terima kasih! Ulasan Anda berhasil disimpan.");
+      setComment("");
+      if (onSubmitted) onSubmitted();
     }
   };
 

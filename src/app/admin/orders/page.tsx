@@ -8,10 +8,9 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Search, Trash2, Printer } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import { orderApi } from "@/lib/api";
 import { toast } from "sonner";
 import type { Order, OrderStatus } from "@/lib/types";
-import { updateOrderStatus, updateShipment, deleteOrder } from "./actions";
 
 function formatPrice(price: number) {
   return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(price);
@@ -238,39 +237,23 @@ export default function AdminOrdersPage() {
   const [isPending, startTransition] = useTransition();
 
   const fetchOrders = async () => {
-    const supabase = createClient();
-    const { data } = await supabase
-      .from("orders")
-      .select("*, order_items(*, product:products(images)), shipment:shipments(*), profiles(full_name, phone)")
-      .order("created_at", { ascending: false });
-    setOrders((data as Order[]) || []);
+    const res = await orderApi.getAll({ admin: true });
+    if (res.success && res.data) {
+      setOrders(res.data);
+    }
   };
 
   useEffect(() => {
-    let cancelled = false;
-
-    async function loadOrders() {
-      const supabase = createClient();
-      const { data } = await supabase
-        .from("orders")
-        .select("*, order_items(*, product:products(images)), shipment:shipments(*), profiles(full_name, phone)")
-        .order("created_at", { ascending: false });
-      if (!cancelled) setOrders((data as Order[]) || []);
-    }
-
-    loadOrders();
-    return () => {
-      cancelled = true;
-    };
+    fetchOrders();
   }, []);
 
   const handleDelete = (orderId: string) => {
     if (!confirm("Hapus pesanan ini? Detail produk dan resi terkait juga akan terhapus.")) return;
 
     startTransition(async () => {
-      const result = await deleteOrder(orderId);
-      if (result.error) {
-        toast.error(result.error);
+      const result = await orderApi.delete(orderId);
+      if (!result.success) {
+        toast.error(result.error || "Gagal menghapus pesanan");
       } else {
         toast.success("Pesanan berhasil dihapus");
         fetchOrders();
@@ -281,9 +264,9 @@ export default function AdminOrdersPage() {
 
   const handleUpdateStatus = (orderId: string, status: OrderStatus) => {
     startTransition(async () => {
-      const result = await updateOrderStatus(orderId, status);
-      if (result.error) {
-        toast.error(result.error);
+      const result = await orderApi.updateStatus(orderId, status);
+      if (!result.success) {
+        toast.error(result.error || "Gagal mengubah status");
       } else {
         toast.success(`Status diubah ke ${status}`);
         fetchOrders();
@@ -299,11 +282,10 @@ export default function AdminOrdersPage() {
     const trackingNumber = formData.get("tracking_number") as string;
 
     startTransition(async () => {
-      const result = await updateShipment(orderId, courier, trackingNumber);
-      if (result.error) {
-        toast.error(result.error);
+      const result = await orderApi.updateShipment(orderId, courier, trackingNumber);
+      if (!result.success) {
+        toast.error(result.error || "Gagal menyimpan resi");
       } else {
-        await updateOrderStatus(orderId, "shipped");
         toast.success("Resi berhasil diinput");
         fetchOrders();
         setSelected(null);

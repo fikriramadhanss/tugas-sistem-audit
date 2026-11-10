@@ -1,4 +1,3 @@
-import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
@@ -6,6 +5,7 @@ import { Separator } from "@/components/ui/separator";
 import { ProductActions } from "./actions";
 import { ProductCard } from "@/components/product-card";
 import { ChevronRight, PackageCheck, Sparkles, Star } from "lucide-react";
+import { productApi } from "@/lib/api";
 import type { Product } from "@/lib/types";
 import { ProductReviews } from "./product-reviews";
 
@@ -21,26 +21,22 @@ function formatPrice(price: number) {
 
 export default async function ProductDetailPage({ params }: { params: Params }) {
   const { slug } = await params;
-  let product;
+  let product: Product | null = null;
   let related: Product[] = [];
 
   try {
-    const supabase = await createClient();
-    const { data } = await supabase
-      .from("products")
-      .select("*, category:categories(*)")
-      .eq("slug", slug)
-      .single();
-    product = data;
-
-    if (product) {
-      const { data: rel } = await supabase
-        .from("products")
-        .select("*, category:categories(*), reviews(rating)")
-        .eq("category_id", product.category_id)
-        .neq("id", product.id)
-        .limit(4);
-      related = (rel as Product[]) || [];
+    const res = await productApi.getBySlug(slug);
+    if (res.success && res.data) {
+      product = res.data;
+      if (product.category_id) {
+        const relRes = await productApi.getAll({
+          category_id: Number(product.category_id),
+          limit: 4,
+        });
+        if (relRes.success && relRes.data) {
+          related = relRes.data.filter((p) => p.id !== product?.id);
+        }
+      }
     }
   } catch {
     notFound();

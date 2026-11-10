@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Trash2, Upload } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import { bannerApi } from "@/lib/api";
 import { toast } from "sonner";
 
 type Banner = { id: string; image_url: string; sort_order: number };
@@ -22,13 +22,13 @@ export default function AdminBannersPage() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const fetchBanners = async () => {
-    const supabase = createClient();
-    const { data } = await supabase.from("banners").select("*").order("sort_order");
-    setBanners((data as Banner[]) || []);
+    const res = await bannerApi.getAll();
+    if (res.success && res.data) {
+      setBanners(res.data);
+    }
   };
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchBanners();
   }, []);
 
@@ -37,16 +37,11 @@ export default function AdminBannersPage() {
     if (!files || files.length === 0) return;
     setUploading(true);
 
-    const supabase = createClient();
-
     for (let i = 0; i < files.length; i++) {
       const dataUrl = await fileToDataUrl(files[i]);
-      const { error } = await supabase.from("banners").insert({
-        image_url: dataUrl,
-        sort_order: banners.length + i,
-      });
-      if (error) {
-        toast.error("Gagal: " + error.message);
+      const res = await bannerApi.create(dataUrl, banners.length + i);
+      if (!res.success) {
+        toast.error("Gagal: " + (res.error || "Gagal mengupload"));
         setUploading(false);
         return;
       }
@@ -59,10 +54,13 @@ export default function AdminBannersPage() {
   };
 
   const removeBanner = async (id: string) => {
-    const supabase = createClient();
-    await supabase.from("banners").delete().eq("id", id);
-    toast.success("Banner dihapus");
-    fetchBanners();
+    const res = await bannerApi.delete(id);
+    if (res.success) {
+      toast.success("Banner dihapus");
+      fetchBanners();
+    } else {
+      toast.error(res.error || "Gagal menghapus banner");
+    }
   };
 
   return (

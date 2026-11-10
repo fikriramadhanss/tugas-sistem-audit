@@ -1,24 +1,37 @@
-import { createClient } from "@/lib/supabase/server";
-import { Star } from "lucide-react";
-import { DeleteReviewButton } from "./delete-review-button";
+"use client";
 
-export const dynamic = "force-dynamic";
+import { useEffect, useState } from "react";
+import { Star, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { reviewApi } from "@/lib/api";
+import { toast } from "sonner";
 
-export default async function AdminReviewsPage() {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let reviews: any[] = [];
+export default function AdminReviewsPage() {
+  const [reviews, setReviews] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  try {
-    const supabase = await createClient();
-    const { data } = await supabase
-      .from("reviews")
-      .select("*, user:profiles(full_name), product:products(name)")
-      .order("created_at", { ascending: false });
-    
-    reviews = data || [];
-  } catch (error) {
-    console.error("Error fetching reviews:", error);
-  }
+  const fetchReviews = async () => {
+    const res = await reviewApi.getAllForAdmin();
+    if (res.success && res.data) {
+      setReviews(res.data);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    fetchReviews();
+  }, []);
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Apakah Anda yakin ingin menghapus ulasan ini?")) return;
+    const res = await reviewApi.delete(id);
+    if (res.success) {
+      toast.success("Ulasan berhasil dihapus.");
+      fetchReviews();
+    } else {
+      toast.error(res.error || "Gagal menghapus ulasan");
+    }
+  };
 
   return (
     <div>
@@ -40,7 +53,13 @@ export default async function AdminReviewsPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {reviews.length === 0 ? (
+            {loading ? (
+              <tr>
+                <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                  Memuat data ulasan...
+                </td>
+              </tr>
+            ) : reviews.length === 0 ? (
               <tr>
                 <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
                   Belum ada ulasan.
@@ -56,7 +75,7 @@ export default async function AdminReviewsPage() {
                     {review.user?.full_name || "Pengguna Anonim"}
                   </td>
                   <td className="px-4 py-3 max-w-[200px] truncate">
-                    {review.product?.name || "Produk dihapus"}
+                    {review.product?.name || "Produk"}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1">
@@ -70,7 +89,15 @@ export default async function AdminReviewsPage() {
                     </p>
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <DeleteReviewButton reviewId={review.id} />
+                    <Button 
+                      variant="ghost" 
+                      size="icon-sm" 
+                      className="text-muted-foreground hover:text-destructive"
+                      onClick={() => handleDelete(review.id)}
+                      aria-label="Hapus ulasan"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   </td>
                 </tr>
               ))

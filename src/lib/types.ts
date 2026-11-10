@@ -7,7 +7,7 @@ export type Profile = {
   province: string | null;
   postal_code: string | null;
   avatar_url: string | null;
-  role: "user" | "admin";
+  role: "user" | "admin" | "superadmin";
   created_at: string;
   updated_at: string;
 };

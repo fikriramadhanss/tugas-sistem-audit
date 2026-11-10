@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { ShoppingBag, MessageCircle, Minus, Plus } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import { cartApi, getToken } from "@/lib/api";
 import { toast } from "sonner";
 import type { Product } from "@/lib/types";
 import { useCart } from "@/components/cart-context";
@@ -30,23 +30,16 @@ export function ProductActions({
   const maxQty = Math.max(1, product.stock);
 
   const addToCart = async () => {
-    const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
+    const token = getToken();
+    if (!token) {
       toast.error("Silakan login terlebih dahulu");
+      router.push("/login");
       return;
     }
 
-    const { error } = await supabase.from("carts").upsert(
-      { user_id: user.id, product_id: product.id, quantity: qty },
-      { onConflict: "user_id,product_id" }
-    );
-
-    if (error) {
-      toast.error("Gagal menambahkan ke keranjang");
+    const res = await cartApi.add(product.id, qty);
+    if (!res.success) {
+      toast.error(res.error || "Gagal menambahkan ke keranjang");
     } else {
       toast.success("Berhasil masuk ke keranjang");
       refreshCart();
@@ -54,12 +47,8 @@ export function ProductActions({
   };
 
   const orderWhatsApp = async () => {
-    const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
+    const token = getToken();
+    if (!token) {
       toast.error("Silakan login terlebih dahulu untuk melakukan pemesanan");
       router.push("/login");
       return;

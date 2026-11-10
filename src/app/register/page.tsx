@@ -2,13 +2,15 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createClient } from "@/lib/supabase/client";
+import { authApi } from "@/lib/api";
 import { toast } from "sonner";
 
 export default function RegisterPage() {
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
 
   const handleRegister = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -19,30 +21,20 @@ export default function RegisterPage() {
     const email = formData.get("email") as string;
     const password = formData.get("password") as string;
 
-    const supabase = createClient();
-    const { error } = await supabase.auth.signUp({
+    const res = await authApi.register({
+      full_name: fullName,
       email,
       password,
-      options: { 
-        data: { full_name: fullName },
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-      },
     });
 
-    if (error) {
-      toast.error(error.message);
+    if (!res.success) {
+      toast.error(res.error || "Gagal melakukan registrasi.");
     } else {
-      toast.success("Registrasi berhasil! Cek email untuk verifikasi.");
+      toast.success("Registrasi berhasil! Selamat datang.");
+      router.push("/");
+      router.refresh();
     }
     setLoading(false);
-  };
-
-  const handleGoogleLogin = async () => {
-    const supabase = createClient();
-    await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
-    });
   };
 
   return (
@@ -72,19 +64,6 @@ export default function RegisterPage() {
             {loading ? "Memproses..." : "Daftar"}
           </Button>
         </form>
-
-        <div className="relative" suppressHydrationWarning>
-          <div className="absolute inset-0 flex items-center" suppressHydrationWarning>
-            <span className="w-full border-t border-border" />
-          </div>
-          <div className="relative flex justify-center text-xs uppercase" suppressHydrationWarning>
-            <span className="bg-background px-2 text-muted-foreground">atau</span>
-          </div>
-        </div>
-
-        <Button variant="outline" className="w-full" onClick={handleGoogleLogin}>
-          Daftar dengan Google
-        </Button>
 
         <p className="text-center text-sm text-muted-foreground" suppressHydrationWarning>
           Sudah punya akun?{" "}

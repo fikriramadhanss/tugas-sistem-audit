@@ -1,50 +1,34 @@
-import { createClient } from "@/lib/supabase/server";
+"use client";
+
+import { useEffect, useState } from "react";
 import { Star, MessageSquare } from "lucide-react";
 import { ReviewForm } from "./review-form";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { reviewApi, getToken } from "@/lib/api";
 import type { Review } from "@/lib/types";
 
-export async function ProductReviews({ productId }: { productId: string }) {
-  const supabase = await createClient();
+export function ProductReviews({ productId }: { productId: string }) {
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
-  // Fetch reviews
-  const { data: reviewsData } = await supabase
-    .from("reviews")
-    .select("*, user:profiles(full_name, avatar_url)")
-    .eq("product_id", productId)
-    .order("created_at", { ascending: false });
-
-  const reviews = (reviewsData as Review[]) || [];
-
-  // Check auth and purchase status
-  const { data: { user } } = await supabase.auth.getUser();
-  let canReview = false;
-  let userReview: Review | undefined;
-
-  if (user) {
-    // Has the user reviewed it already?
-    userReview = reviews.find((r) => r.user_id === user.id);
-
-    // Has the user ordered it?
-    const { data: orderItems } = await supabase
-      .from("order_items")
-      .select("order:orders(user_id, status)")
-      .eq("product_id", productId);
-
-    if (orderItems && orderItems.length > 0) {
-      // Check if any of these order items belong to an order placed by the user
-      // and ideally not cancelled. We'll accept any non-cancelled order for now.
-      canReview = orderItems.some(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (item: any) =>
-          item.order?.user_id === user.id && item.order?.status !== "cancelled"
-      );
+  const fetchReviews = async () => {
+    const res = await reviewApi.getByProduct(productId);
+    if (res.success && res.data) {
+      setReviews(res.data);
     }
-  }
+    setLoading(false);
+  };
 
-  const averageRating = reviews.length > 0 
-    ? (reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1)
-    : "0";
+  useEffect(() => {
+    setIsLoggedIn(!!getToken());
+    fetchReviews();
+  }, [productId]);
+
+  const averageRating =
+    reviews.length > 0
+      ? (reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1)
+      : "0";
 
   return (
     <section className="mt-16 border-t border-border pt-10">
@@ -62,56 +46,67 @@ export async function ProductReviews({ productId }: { productId: string }) {
         )}
       </div>
 
-      {canReview && (
-        <ReviewForm 
-          productId={productId} 
-          initialRating={userReview?.rating} 
-          initialComment={userReview?.comment || ""} 
-        />
+      {/* Review Form (jika login) */}
+      {isLoggedIn ? (
+        <ReviewForm productId={productId} onSubmitted={fetchReviews} />
+      ) : (
+        <div className="mt-6 rounded-xl border border-dashed border-border p-5 text-center text-sm text-muted-foreground">
+          Silakan <a href="/login" className="text-accent underline font-medium">masuk ke akun Anda</a> untuk memberikan ulasan produk ini.
+        </div>
       )}
 
-      <div className="mt-8 space-y-6">
-        {reviews.length === 0 ? (
-          <div className="flex flex-col items-center justify-center rounded-xl border border-border bg-secondary/30 py-12 text-center">
+      {/* Reviews List */}
+      <div className="mt-8 space-y-4">
+        {loading ? (
+          <p className="text-sm text-muted-foreground">Memuat ulasan...</p>
+        ) : reviews.length === 0 ? (
+          <div className="flex flex-col items-center justify-center rounded-xl border border-border bg-card/50 py-12 text-center">
             <MessageSquare className="h-8 w-8 text-muted-foreground" />
-            <p className="mt-2 text-sm text-muted-foreground">Belum ada ulasan untuk produk ini.</p>
+            <p className="mt-3 text-sm font-medium">Belum ada ulasan</p>
+            <p className="mt-1 text-xs text-muted-foreground">Jadilah yang pertama mengulas aroma parfum ini.</p>
           </div>
         ) : (
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {reviews.map((review) => (
-              <div key={review.id} className="rounded-xl border border-border bg-card p-5 shadow-sm">
+          reviews.map((review) => (
+            <div key={review.id} className="rounded-xl border border-border bg-card p-5">
+              <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
-                  <Avatar className="h-9 w-9">
+                  <Avatar className="h-8 w-8">
                     <AvatarImage src={review.user?.avatar_url || ""} />
-                    <AvatarFallback>{review.user?.full_name?.charAt(0) || "U"}</AvatarFallback>
+                    <AvatarFallback className="text-xs">
+                      {review.user?.full_name?.slice(0, 2).toUpperCase() || "U"}
+                    </AvatarFallback>
                   </Avatar>
                   <div>
-                    <p className="text-sm font-medium">{review.user?.full_name || "Pengguna"}</p>
+                    <p className="text-sm font-medium">{review.user?.full_name || "Pelanggan"}</p>
                     <p className="text-[10px] text-muted-foreground">
-                      {new Date(review.created_at).toLocaleDateString("id-ID")}
+                      {new Date(review.created_at).toLocaleDateString("id-ID", {
+                        day: "numeric",
+                        month: "short",
+                        year: "numeric",
+                      })}
                     </p>
                   </div>
                 </div>
-                <div className="mt-3 flex gap-0.5">
+                <div className="flex items-center gap-0.5">
                   {[1, 2, 3, 4, 5].map((star) => (
                     <Star
                       key={star}
-                      className={`h-3 w-3 ${
-                        star <= review.rating
+                      className={`h-3.5 w-3.5 ${
+                        review.rating >= star
                           ? "fill-yellow-400 text-yellow-400"
                           : "text-muted-foreground/30"
                       }`}
                     />
                   ))}
                 </div>
-                {review.comment && (
-                  <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-                    &quot;{review.comment}&quot;
-                  </p>
-                )}
               </div>
-            ))}
-          </div>
+              {review.comment && (
+                <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+                  {review.comment}
+                </p>
+              )}
+            </div>
+          ))
         )}
       </div>
     </section>

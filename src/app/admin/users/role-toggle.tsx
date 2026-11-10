@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
@@ -9,48 +8,60 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { toggleUserRole } from "./actions";
+import { userApi } from "@/lib/api";
 import { toast } from "sonner";
 
 interface RoleToggleProps {
   userId: string;
   initialRole: string;
+  onUpdated?: () => void;
 }
 
-export function RoleToggle({ userId, initialRole }: RoleToggleProps) {
-  const router = useRouter();
+export function RoleToggle({ userId, initialRole, onUpdated }: RoleToggleProps) {
   const [role, setRole] = useState(initialRole);
   const [isPending, setIsPending] = useState(false);
 
-  const handleToggle = async () => {
+  const handleToggle = async (newRole: "user" | "admin" | "superadmin") => {
     setIsPending(true);
-    const result = await toggleUserRole(userId, role);
-    
-    if (result.error) {
-      toast.error(result.error);
-    } else if (result.success && result.newRole) {
-      setRole(result.newRole);
-      toast.success(`Role updated to ${result.newRole}`);
-      router.refresh();
+    const res = await userApi.toggleRole(userId, newRole);
+
+    if (!res.success) {
+      toast.error(res.error || "Gagal mengubah role");
+    } else {
+      setRole(newRole);
+      toast.success(`Role berhasil diubah ke ${newRole}`);
+      if (onUpdated) onUpdated();
     }
-    
+
     setIsPending(false);
   };
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger disabled={isPending} className="focus:outline-none">
-        <Badge 
-          variant={role === "admin" ? "default" : "outline"}
+        <Badge
+          variant={role === "superadmin" ? "default" : role === "admin" ? "secondary" : "outline"}
           className={`cursor-pointer ${isPending ? "opacity-50" : "hover:opacity-80"}`}
         >
           {role}
         </Badge>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuItem onClick={handleToggle}>
-          Ubah ke {role === "admin" ? "user" : "admin"}
-        </DropdownMenuItem>
+        {role !== "user" && (
+          <DropdownMenuItem onClick={() => handleToggle("user")}>
+            Ubah ke User
+          </DropdownMenuItem>
+        )}
+        {role !== "admin" && (
+          <DropdownMenuItem onClick={() => handleToggle("admin")}>
+            Ubah ke Admin
+          </DropdownMenuItem>
+        )}
+        {role !== "superadmin" && (
+          <DropdownMenuItem onClick={() => handleToggle("superadmin")}>
+            Ubah ke Superadmin
+          </DropdownMenuItem>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

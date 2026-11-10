@@ -1,14 +1,11 @@
 import Link from "next/link";
 import { Separator } from "@/components/ui/separator";
-import { createClient } from "@/lib/supabase/server";
+import { settingApi } from "@/lib/api";
 
 async function getSettings() {
   try {
-    const supabase = await createClient();
-    const { data } = await supabase.from("store_settings").select("*");
-    const map: Record<string, string> = {};
-    data?.forEach((row: { key: string; value: string }) => { map[row.key] = row.value; });
-    return map;
+    const res = await settingApi.get();
+    return res.data || {};
   } catch {
     return {};
   }

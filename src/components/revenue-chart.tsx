@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
-import { createClient } from "@/lib/supabase/client";
+import { orderApi } from "@/lib/api";
 
 type ChartData = { date: string; revenue: number };
 
@@ -16,23 +16,22 @@ export function RevenueChart() {
   const [total, setTotal] = useState(0);
 
   useEffect(() => {
-    const fetch = async () => {
-      const supabase = createClient();
-      let query = supabase
-        .from("orders")
-        .select("total_amount, created_at")
-        .eq("status", "delivered")
-        .order("created_at", { ascending: true });
+    const fetchOrders = async () => {
+      const res = await orderApi.getAll({ admin: true });
+      if (!res.success || !res.data) {
+        setData([]);
+        setTotal(0);
+        return;
+      }
+
+      let orders = res.data.filter((o) => ["delivered", "paid", "shipped"].includes(o.status));
 
       if (period !== "all") {
         const days = period === "7d" ? 7 : 30;
         const from = new Date();
         from.setDate(from.getDate() - days);
-        query = query.gte("created_at", from.toISOString());
+        orders = orders.filter((o) => new Date(o.created_at) >= from);
       }
-
-      const { data: orders } = await query;
-      if (!orders) { setData([]); setTotal(0); return; }
 
       // Group by date
       const grouped: Record<string, number> = {};
@@ -46,7 +45,8 @@ export function RevenueChart() {
       setData(Object.entries(grouped).map(([date, revenue]) => ({ date, revenue })));
       setTotal(sum);
     };
-    fetch();
+
+    fetchOrders();
   }, [period]);
 
   return (

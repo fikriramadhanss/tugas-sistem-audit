@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import { orderApi, getToken } from "@/lib/api";
 import { Separator } from "@/components/ui/separator";
 
 function formatPrice(price: number) {
@@ -34,35 +34,20 @@ export default function InvoicePage() {
   useEffect(() => {
     const fetchOrder = async () => {
       try {
-        const supabase = createClient();
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
+        const token = getToken();
+        if (!token) {
           router.push("/login");
           return;
         }
 
-        const { data, error: fetchErr } = await supabase
-          .from("orders")
-          .select("*, order_items(*), profiles(role)")
-          .eq("id", id)
-          .single();
-
-        if (fetchErr || !data) {
-          setError("Pesanan tidak ditemukan");
+        const res = await orderApi.getDetail(id as string);
+        if (!res.success || !res.data) {
+          setError(res.error || "Pesanan tidak ditemukan");
           setLoading(false);
           return;
         }
 
-        const isOwner = data.user_id === user.id;
-        const isAdmin = data.profiles?.role === "admin";
-
-        if (!isOwner && !isAdmin) {
-          setError("Akses Ditolak: Anda tidak berwenang melihat invoice ini.");
-          setLoading(false);
-          return;
-        }
-
-        setOrder(data);
+        setOrder(res.data);
         setLoading(false);
 
         if (searchParams.get("print") === "true") {
@@ -144,7 +129,7 @@ export default function InvoicePage() {
             {order.notes && (
               <div className="mt-3">
                 <h4 className="text-[10px] uppercase text-muted-foreground font-bold">Catatan:</h4>
-                <p className="text-xs text-neutral-600 font-medium italic">"{order.notes}"</p>
+                <p className="text-xs text-neutral-600 font-medium italic">&quot;{order.notes}&quot;</p>
               </div>
             )}
           </div>

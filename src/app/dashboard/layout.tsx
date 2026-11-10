@@ -2,21 +2,16 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { User, Package, ShieldAlert } from "lucide-react";
 import { LogoutButton } from "@/components/logout-button";
-import { createClient } from "@/lib/supabase/server";
+import { cookies } from "next/headers";
 
 export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  
-  let isAdmin = false;
-  if (user) {
-    const { data } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-    isAdmin = data?.role === "admin";
-  }
+  const cookieStore = await cookies();
+  const userRole = cookieStore.get("user_role")?.value;
+  const isAdmin = userRole === "admin" || userRole === "superadmin";
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
@@ -31,7 +26,7 @@ export default async function DashboardLayout({
             </Button>
             {isAdmin && (
               <Button variant="ghost" className="justify-start text-accent hover:text-accent/80 hover:bg-accent/10" render={<Link href="/admin" />}>
-                <ShieldAlert className="mr-2 h-4 w-4" />Super Admin
+                <ShieldAlert className="mr-2 h-4 w-4" />Admin Panel
               </Button>
             )}
             <LogoutButton />

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Heart } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import { wishlistApi, getToken } from "@/lib/api";
 import { toast } from "sonner";
 import { ProductCard } from "@/components/product-card";
 import type { WishlistItem, Product } from "@/lib/types";
@@ -13,30 +13,32 @@ export default function WishlistPage() {
   const [items, setItems] = useState<WishlistItem[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const fetch = async () => {
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { setLoading(false); return; }
-
-      const { data } = await supabase
-        .from("wishlist")
-        .select("*, product:products(*, category:categories(*))")
-        .eq("user_id", user.id);
-      setItems((data as WishlistItem[]) || []);
+  const fetchWishlist = async () => {
+    const token = getToken();
+    if (!token) {
       setLoading(false);
-    };
-    fetch();
+      return;
+    }
+
+    const res = await wishlistApi.get();
+    if (res.success && res.data) {
+      setItems(res.data);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    fetchWishlist();
   }, []);
 
-  const removeItem = async (id: string) => {
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    await supabase.from("wishlist").delete().eq("id", id).eq("user_id", user.id);
-    setItems((prev) => prev.filter((i) => i.id !== id));
-    toast.success("Dihapus dari wishlist");
+  const removeItem = async (productId: string) => {
+    const res = await wishlistApi.delete(productId);
+    if (res.success) {
+      setItems((prev) => prev.filter((i) => i.product_id !== productId && i.id !== productId));
+      toast.success("Dihapus dari wishlist");
+    } else {
+      toast.error(res.error || "Gagal menghapus");
+    }
   };
 
   if (loading) {
@@ -67,7 +69,7 @@ export default function WishlistPage() {
               variant="ghost"
               size="icon"
               className="absolute right-1 top-1 h-8 w-8 rounded-full bg-background/80"
-              onClick={() => removeItem(item.id)}
+              onClick={() => removeItem(item.product_id)}
             >
               <Heart className="h-4 w-4 fill-current text-red-500" />
             </Button>
